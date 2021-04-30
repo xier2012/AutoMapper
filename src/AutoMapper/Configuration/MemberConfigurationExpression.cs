@@ -1,17 +1,23 @@
+using AutoMapper.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-
 namespace AutoMapper.Configuration
 {
-    using static AutoMapper.Internal.ExpressionFactory;
-
+    using static AutoMapper.Execution.ExpressionBuilder;
+    public interface IPropertyMapConfiguration
+    {
+        void Configure(TypeMap typeMap);
+        MemberInfo DestinationMember { get; }
+        LambdaExpression SourceExpression { get; }
+        LambdaExpression GetDestinationExpression();
+        IPropertyMapConfiguration Reverse();
+    }
     public class MemberConfigurationExpression<TSource, TDestination, TMember> : IMemberConfigurationExpression<TSource, TDestination, TMember>, IPropertyMapConfiguration
     {
-        private LambdaExpression _sourceExpression;
-        private MemberInfo _sourceMember;
+        private MemberInfo[] _sourceMembers;
         private readonly Type _sourceType;
         protected List<Action<PropertyMap>> PropertyMapActions { get; } = new List<Action<PropertyMap>>();
 
@@ -117,14 +123,14 @@ namespace AutoMapper.Configuration
 
         internal void MapFromUntyped(LambdaExpression sourceExpression)
         {
-            _sourceExpression = sourceExpression;
+            SourceExpression = sourceExpression;
             PropertyMapActions.Add(pm => pm.MapFrom(sourceExpression));
         }
 
-        public void MapFrom(string sourceMemberName)
+        public void MapFrom(string sourceMembersPath)
         {
-            _sourceMember = _sourceType.GetFieldOrProperty(sourceMemberName);
-            PropertyMapActions.Add(pm => pm.MapFrom(sourceMemberName));
+            _sourceMembers = ReflectionHelper.GetMemberPath(_sourceType, sourceMembersPath);
+            PropertyMapActions.Add(pm => pm.MapFrom(sourceMembersPath));
         }
 
         public void Condition(Func<TSource, TDestination, TMember, TMember, ResolutionContext, bool> condition)
@@ -226,15 +232,8 @@ namespace AutoMapper.Configuration
             });
         }
 
-        public void AddTransform(Expression<Func<TMember, TMember>> transformer)
-        {
-            PropertyMapActions.Add(pm =>
-            {
-                var config = new ValueTransformerConfiguration(typeof(TMember), transformer);
-
-                pm.AddValueTransformation(config);
-            });
-        }
+        public void AddTransform(Expression<Func<TMember, TMember>> transformer) =>
+            PropertyMapActions.Add(pm => pm.AddValueTransformation(new ValueTransformerConfiguration(pm.DestinationType, transformer)));
 
         public void ExplicitExpansion()
         {
@@ -247,16 +246,17 @@ namespace AutoMapper.Configuration
             PropertyMapActions.Add(pm =>
             {
                 pm.Ignored = true;
-                if(ignorePaths)
+                if(ignorePaths && pm.TypeMap.PathMaps.Count > 0)
                 {
                     pm.TypeMap.IgnorePaths(DestinationMember);
                 }
             });
 
-        public void AllowNull()
-        {
-            PropertyMapActions.Add(pm => pm.AllowNull = true);
-        }
+        public void AllowNull() => SetAllowNull(true);
+
+        public void DoNotAllowNull() => SetAllowNull(false);
+
+        private void SetAllowNull(bool value) => PropertyMapActions.Add(pm => pm.AllowNull = value);
 
         public void UseDestinationValue() => SetUseDestinationValue(true);
 
@@ -292,7 +292,7 @@ namespace AutoMapper.Configuration
             Expression<Func<TSource, TSourceMember>> sourceMember = null,
             string sourceMemberName = null)
         {
-            var config = new ValueConverterConfiguration(typeof(TValueConverter),
+            var config = new ValueResolverConfiguration(typeof(TValueConverter),
                 typeof(IValueConverter<TSourceMember, TMember>))
             {
                 SourceMember = sourceMember,
@@ -305,7 +305,7 @@ namespace AutoMapper.Configuration
         private static void ConvertUsing<TSourceMember>(PropertyMap propertyMap, IValueConverter<TSourceMember, TMember> valueConverter,
             Expression<Func<TSource, TSourceMember>> sourceMember = null, string sourceMemberName = null)
         {
-            var config = new ValueConverterConfiguration(valueConverter,
+            var config = new ValueResolverConfiguration(valueConverter,
                 typeof(IValueConverter<TSourceMember, TMember>))
             {
                 SourceMember = sourceMember,
@@ -319,12 +319,12 @@ namespace AutoMapper.Configuration
         {
             var destMember = DestinationMember;
 
-            if(destMember.DeclaringType.IsGenericTypeDefinition())
+            if(destMember.DeclaringType.ContainsGenericParameters)
             {
-                destMember = typeMap.DestinationTypeDetails.PublicReadAccessors.Single(m => m.Name == destMember.Name);
+                destMember = typeMap.DestinationSetters.Single(m => m.Name == destMember.Name);
             }
 
-            var propertyMap = typeMap.FindOrCreatePropertyMapFor(destMember);
+            var propertyMap = typeMap.FindOrCreatePropertyMapFor(destMember, typeof(TMember) == typeof(object) ? destMember.GetMemberType() : typeof(TMember));
 
             Apply(propertyMap);
         }
@@ -335,18 +335,21 @@ namespace AutoMapper.Configuration
             {
                 action(propertyMap);
             }
-            propertyMap.CheckMappedReadonly();
         }
 
-        public LambdaExpression SourceExpression => _sourceExpression;
-        public LambdaExpression GetDestinationExpression() => MemberAccessLambda(DestinationMember);
+        public LambdaExpression SourceExpression { get; private set; }
+        public LambdaExpression GetDestinationExpression() => DestinationMember.Lambda();
 
         public IPropertyMapConfiguration Reverse()
         {
             var destinationType = DestinationMember.DeclaringType;
-            if (_sourceMember != null)
+            if (_sourceMembers != null)
             {
-                var reversedMemberConfiguration = new MemberConfigurationExpression<TDestination, TSource, object>(_sourceMember, destinationType);
+                if (_sourceMembers.Length > 1)
+                {
+                    return null;
+                }
+                var reversedMemberConfiguration = new MemberConfigurationExpression<TDestination, TSource, object>(_sourceMembers[0], destinationType);
                 reversedMemberConfiguration.MapFrom(DestinationMember.Name);
                 return reversedMemberConfiguration;
             }
@@ -354,9 +357,9 @@ namespace AutoMapper.Configuration
             {
                 return null;
             }
-            return PathConfigurationExpression<TDestination, TSource, object>.Create(_sourceExpression, GetDestinationExpression());
+            return PathConfigurationExpression<TDestination, TSource, object>.Create(SourceExpression, GetDestinationExpression());
         }
 
-        public void DontUseDestinationValue() => SetUseDestinationValue(false);
+        public void DoNotUseDestinationValue() => SetUseDestinationValue(false);
     }
 }

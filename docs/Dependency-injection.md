@@ -1,30 +1,3 @@
-# Dependency Injection
-
-AutoMapper supports the ability to construct [Custom Value Resolvers](Custom-value-resolvers.html), [Custom Type Converters](Custom-type-converters.html), and [Value Converters](Value-converters.html) using static service location:
-
-```c#
-var configuration = new MapperConfiguration(cfg =>
-{
-    cfg.ConstructServicesUsing(ObjectFactory.GetInstance);
-
-    cfg.CreateMap<Source, Destination>();
-});
-```
-
-Or dynamic service location, to be used in the case of instance-based containers (including child/nested containers):
-
-```c#
-var mapper = new Mapper(configuration, childContainer.GetInstance);
-
-var dest = mapper.Map<Source, Destination>(new Source { Value = 15 });
-```
-
-### Queryable Extensions
-
-Starting with 8.0 you can use IMapper.ProjectTo. For older versions you need to pass the configuration to the extension method ``` IQueryable.ProjectTo<T>(IConfigurationProvider) ```.
-
-Note that IQueryable.ProjectTo is [more limited](Queryable-Extensions.html#supported-mapping-options) than IMapper.Map, as only what is allowed by the underlying LINQ provider is supported. That means you cannot use DI with value resolvers and converters as you can with Map.
-
 ## Examples
 
 ### ASP.NET Core
@@ -51,56 +24,10 @@ public class EmployeesController {
 ```
 ### AutoFac
 
-Check [this blog](https://dotnetfalcon.com/autofac-support-for-automapper/).
+There is a third-party [NuGet package](https://www.nuget.org/packages/AutoMapper.Contrib.Autofac.DependencyInjection) you might want to try.
 
-There is also a third-party [NuGet package](https://www.nuget.org/packages/AutoMapper.Contrib.Autofac.DependencyInjection) you might want to try.
+Also, check [this blog](https://dotnetfalcon.com/autofac-support-for-automapper/).
 
-```c#
-public class AutoMapperModule : Autofac.Module
-{
-  private readonly IEnumerable<Assembly> assembliesToScan;
-
-  public AutoMapperModule(IEnumerable<Assembly> assembliesToScan) => this.assembliesToScan = assembliesToScan;
-
-  public AutoMapperModule(params Assembly[] assembliesToScan) : this((IEnumerable<Assembly>)assembliesToScan) { }
-  
-  protected override void Load(ContainerBuilder builder)
-  {
-    base.Load(builder);          
-    var assembliesToScan = this.assembliesToScan as Assembly[] ?? this.assembliesToScan.ToArray();
-
-    var allTypes = assembliesToScan
-                  .Where(a => !a.IsDynamic && a.GetName().Name != nameof(AutoMapper))
-                  .Distinct() // avoid AutoMapper.DuplicateTypeMapConfigurationException
-                  .SelectMany(a => a.DefinedTypes)
-                  .ToArray();
-
-    var openTypes = new[] {
-                            typeof(IValueResolver<,,>),
-                            typeof(IMemberValueResolver<,,,>),
-                            typeof(ITypeConverter<,>),
-                            typeof(IValueConverter<,>),
-                            typeof(IMappingAction<,>)
-            };
-   
-   foreach (var type in openTypes.SelectMany(openType => 
-        allTypes.Where(t => t.IsClass && !t.IsAbstract && ImplementsGenericInterface(t.AsType(), openType))))
-   {
-     builder.RegisterType(type.AsType()).InstancePerDependency();
-   }
-
-    builder.Register<IConfigurationProvider>(ctx => new MapperConfiguration(cfg => cfg.AddMaps(assembliesToScan)));
-   
-    builder.Register<IMapper>(ctx => new Mapper(ctx.Resolve<IConfigurationProvider>(), ctx.Resolve)).InstancePerDependency();
- }
- 
- private static bool ImplementsGenericInterface(Type type, Type interfaceType)
-           => IsGenericType(type, interfaceType) || type.GetTypeInfo().ImplementedInterfaces.Any(@interface => IsGenericType(@interface, interfaceType));
-
- private static bool IsGenericType(Type type, Type genericType)
-            => type.GetTypeInfo().IsGenericType && type.GetGenericTypeDefinition() == genericType;
-}
-```
 ### Ninject
 
 For those using Ninject here is an example of a Ninject module for AutoMapper
@@ -244,3 +171,61 @@ public class AutoMapperInstaller : IWindsorInstaller
         }
 }
 ```
+
+### Catel.IoC
+
+For those using Catel.IoC here is how you register AutoMapper. First define the configuration using [profiles](Configuration.html#profile-instances). And then you let AutoMapper know in what assemblies those profiles are defined by registering AutoMapper in the ServiceLocator at startup:
+```c#
+ServiceLocator.Default.RegisterInstance(typeof(IMapper), new Mapper(CreateConfiguration()));
+```
+
+Configuration Creation Method:
+```c#
+public static MapperConfiguration CreateConfiguration()
+{
+    var config = new MapperConfiguration(cfg =>
+    {
+        // Add all profiles in current assembly
+        cfg.AddMaps(GetType().Assembly);
+    });
+
+    return config;
+}
+```
+
+Now you can inject AutoMapper at runtime into your services/controllers:
+```c#
+public class EmployeesController {
+	private readonly IMapper _mapper;
+
+	public EmployeesController(IMapper mapper) => _mapper = mapper;
+
+	// use _mapper.Map or _mapper.ProjectTo
+}
+```
+## Low level API-s
+
+AutoMapper supports the ability to construct [Custom Value Resolvers](Custom-value-resolvers.html), [Custom Type Converters](Custom-type-converters.html), and [Value Converters](Value-converters.html) using static service location:
+
+```c#
+var configuration = new MapperConfiguration(cfg =>
+{
+    cfg.ConstructServicesUsing(ObjectFactory.GetInstance);
+
+    cfg.CreateMap<Source, Destination>();
+});
+```
+
+Or dynamic service location, to be used in the case of instance-based containers (including child/nested containers):
+
+```c#
+var mapper = new Mapper(configuration, childContainer.GetInstance);
+
+var dest = mapper.Map<Source, Destination>(new Source { Value = 15 });
+```
+
+## Queryable Extensions
+
+Starting with 8.0 you can use `IMapper.ProjectTo`. For older versions you need to pass the configuration to the extension method ``` IQueryable.ProjectTo<T>(IConfigurationProvider) ```.
+
+Note that `ProjectTo` is [more limited](Queryable-Extensions.html#supported-mapping-options) than `Map`, as only what is allowed by the underlying LINQ provider is supported. That means you cannot use DI with value resolvers and converters as you can with `Map`.

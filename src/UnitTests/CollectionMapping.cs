@@ -7,6 +7,7 @@ using Xunit;
 using Shouldly;
 using System.Collections;
 using System.Reflection;
+using AutoMapper.Internal;
 
 namespace AutoMapper.UnitTests
 {
@@ -394,6 +395,24 @@ namespace AutoMapper.UnitTests
             Mapper.Map(new Source(), new Destination())
                 .MyCollection.SequenceEqual(new[] { "one", "two" }).ShouldBeTrue();
         }
+    }
+
+    public class When_mapping_to_readonly_collection_without_setter : AutoMapperSpecBase
+    {
+        public class Source
+        {
+            public IEnumerable<string> MyCollection { get; } = new[] { "one", "two" };
+        }
+        public class Destination
+        {
+            public IEnumerable<string> MyCollection { get; } = new ReadOnlyCollection<string>(new string[0]);
+        }
+        protected override MapperConfiguration Configuration => new MapperConfiguration(cfg => cfg.CreateMap<Source, Destination>());
+        [Fact]
+        public void Should_fail() => new Action(() => Mapper.Map(new Source(), new Destination()))
+            .ShouldThrow<AutoMapperMappingException>()
+            .InnerException.ShouldBeOfType<NotSupportedException>()
+            .Message.ShouldBe("Collection is read-only.");
     }
 
     public class When_mapping_to_readonly_property_UseDestinationValue : AutoMapperSpecBase
@@ -932,13 +951,10 @@ namespace AutoMapper.UnitTests
 
         [Fact]
         public void Should_map_to_NameValueCollection() {
-            // initially results in the following exception:
-            // ----> System.InvalidCastException : Unable to cast object of type 'System.Collections.Specialized.NameValueCollection' to type 'System.Collections.IList'.
-            // this was fixed by adding NameValueCollectionMapper to the MapperRegistry.
             var c = new NameValueCollection();
             var config = new MapperConfiguration(cfg => { });
             var mappedCollection = config.CreateMapper().Map<NameValueCollection, NameValueCollection>(c);
-
+            mappedCollection.ShouldNotBeSameAs(c);
             mappedCollection.ShouldNotBeNull();
         }
     }

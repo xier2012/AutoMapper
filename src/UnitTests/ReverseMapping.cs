@@ -4,9 +4,23 @@ using System.Linq;
 using System;
 using System.Text.RegularExpressions;
 using System.Reflection;
+using AutoMapper.Internal;
 
 namespace AutoMapper.UnitTests
 {
+    public class ReverseMapWithStaticField : AutoMapperSpecBase
+    {
+        class Source
+        {
+            public Guid Id { get; set; }
+        }
+        class Destination
+        {
+            public Guid Id { get; set; }
+        }
+        protected override MapperConfiguration Configuration => new MapperConfiguration(c=>
+            c.CreateMap<Destination, Source>().ForMember(src => src.Id, opt => opt.MapFrom(_ => Guid.Empty)).ReverseMap());
+    }
     public class InvalidReverseMap : NonValidatingSpecBase
     {
         public class One
@@ -199,6 +213,38 @@ namespace AutoMapper.UnitTests
             var model = Mapper.Map<Order>(dto);
             model.CustomerHolder.Customer.Name.ShouldBe("George Costanza");
             model.CustomerHolder.Customer.Total.ShouldBe(74.85m);
+        }
+    }
+
+    public class ReverseMapFromNamingConvention : AutoMapperSpecBase
+    {
+        public class OrderEntity
+        {
+            public int order_id { get; set; }
+            public string order_name { get; set; }
+        }
+
+        public class OrderDto
+        {
+            public int OrderId { get; set; }
+            public string OrderName { get; set; }
+        }
+
+        protected override MapperConfiguration Configuration => new MapperConfiguration(cfg =>
+        {
+            cfg.SourceMemberNamingConvention = new LowerUnderscoreNamingConvention();
+            cfg.DestinationMemberNamingConvention = new PascalCaseNamingConvention();
+            cfg.CreateMap<OrderEntity, OrderDto>()
+                .ReverseMap();
+        });
+
+        [Fact]
+        public void Should_map_reverse()
+        {
+            var dto = new OrderDto { OrderId = 123, OrderName = "Test order" };
+            var model = Mapper.Map<OrderEntity>(dto);
+            model.order_id.ShouldBe(123);
+            model.order_name.ShouldBe("Test order");
         }
     }
 

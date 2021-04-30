@@ -1,20 +1,19 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace AutoMapper
 {
     using Internal;
+    using System.ComponentModel;
 
     [DebuggerDisplay("{DestinationExpression}")]
-    public class PathMap : DefaultMemberMap
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public class PathMap : MemberMap
     {
-        public PathMap(PathMap pathMap, TypeMap typeMap, LambdaExpression customSource) : this(pathMap.DestinationExpression, pathMap.MemberPath, typeMap)
+        public PathMap(PathMap pathMap, TypeMap typeMap, IncludedMember includedMember) : this(pathMap.DestinationExpression, pathMap.MemberPath, typeMap)
         {
-            CustomSource = customSource;
+            IncludedMember = includedMember.Chain(pathMap.IncludedMember);
             CustomMapExpression = pathMap.CustomMapExpression;
             Condition = pathMap.Condition;
             Ignored = pathMap.Ignored;
@@ -30,7 +29,7 @@ namespace AutoMapper
         public override TypeMap TypeMap { get; }
 
         public override Type SourceType => CustomMapExpression.ReturnType;
-        public override LambdaExpression CustomSource { get; set; }
+        public override IncludedMember IncludedMember { get; }
         public LambdaExpression DestinationExpression { get; }
         public override LambdaExpression CustomMapExpression { get; set; }
         public MemberPath MemberPath { get; }
@@ -38,7 +37,7 @@ namespace AutoMapper
         public override string DestinationName => MemberPath.ToString();
 
         public override bool CanResolveValue => !Ignored;
-
+        public override bool CanBeSet => ReflectionHelper.CanBeSet(MemberPath.Last);
         public override bool Ignored { get; set; }
         public override LambdaExpression Condition { get; set; }
     }

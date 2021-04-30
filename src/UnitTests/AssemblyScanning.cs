@@ -12,20 +12,17 @@ namespace AutoMapper.UnitTests
         {
             protected override MapperConfiguration Configuration { get; } = new MapperConfiguration(cfg =>
             {
-                cfg.AddMaps(new[] { typeof(When_scanning_by_assembly).Assembly(), typeof(Mapper).Assembly });
+                cfg.AddMaps(new[] { typeof(When_scanning_by_assembly).Assembly, typeof(Mapper).Assembly });
             });
 
             [Fact]
             public void Should_load_profiles()
             {
-                Configuration.GetAllTypeMaps().Length.ShouldBeGreaterThan(0);
+                Configuration.GetAllTypeMaps().Count.ShouldBeGreaterThan(0);
             }
 
             [Fact]
-            public void Should_load_internal_profiles()
-            {
-                Configuration.Profiles.Where(t => t.Name == InternalProfile.Name).ShouldNotBeEmpty();
-            }
+            public void Should_load_internal_profiles() => GetProfiles().Where(t => t.Name == InternalProfile.Name).ShouldNotBeEmpty();
         }
 
         internal class InternalProfile : Profile
@@ -47,7 +44,7 @@ namespace AutoMapper.UnitTests
             [Fact]
             public void Should_load_profiles()
             {
-                Configuration.GetAllTypeMaps().Length.ShouldBeGreaterThan(0);
+                Configuration.GetAllTypeMaps().Count.ShouldBeGreaterThan(0);
             }
         }
 
@@ -67,7 +64,7 @@ namespace AutoMapper.UnitTests
             [Fact]
             public void Should_load_profiles()
             {
-                Configuration.GetAllTypeMaps().Length.ShouldBeGreaterThan(0);
+                Configuration.GetAllTypeMaps().Count.ShouldBeGreaterThan(0);
             }
         }
     }

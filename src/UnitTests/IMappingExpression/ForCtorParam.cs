@@ -10,7 +10,12 @@ namespace AutoMapper.UnitTests
     {
         public class Destination
         {
-            public Destination(string key1, string value1) => (Key, Value) = (key1, value1);
+            public Destination(string key1, string value1)
+            {
+                Key = key1;
+                Value = value1;
+            }
+
             public string Key { get; }
             public string Value { get; }
         }
@@ -37,7 +42,7 @@ namespace AutoMapper.UnitTests
             public Destination(string value) => Value = value;
             public string Value { get; }
         }
-        protected override MapperConfiguration Configuration => new MapperConfiguration(c => c.CreateMap<Source, Destination>().ForCtorParam("value", o => o.MapFrom(s => s.Value1)));
+        protected override MapperConfiguration Configuration => new MapperConfiguration(c => c.CreateProjection<Source, Destination>().ForCtorParam("value", o => o.MapFrom(s => s.Value1)));
         [Fact]
         public void Should_map_ok()
         {
